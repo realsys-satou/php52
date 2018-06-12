@@ -8,8 +8,6 @@
 
 `vagrant init bento/centos-6.8`
 
-`mkdir php52`
-
 - Vagrantfileの"private_network"行のコメント解除
 
 `vagrant up`
