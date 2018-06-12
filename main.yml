@@ -1,0 +1,229 @@
+---
+- hosts: localhost
+  become: yes
+  vars:
+    - ruby_version: 2.3.1
+    - python_version: 3.5.2
+  tasks:
+    - name: disable iptables
+      service: name=iptables state=stopped enabled=no
+    - name: install libselinux-python
+      yum: name=libselinux-python state=latest
+    - name: Disabled SELinux
+      selinux:
+        state: disabled
+    - name: remove localtime
+      file: path=/etc/localtime state=absent
+    - name: change timezone
+      file: src=/usr/share/zoneinfo/Asia/Tokyo dest=/etc/localtime state=link force=yes mode=0644
+    - name: change locale
+      lineinfile: >-
+        dest=/etc/sysconfig/i18n
+        state=present
+        regexp=^LANG=
+        line='LANG="ja_JP.UTF-8"'
+    - name: install remi repository
+      command: rpm -Uvh --force http://rpms.famillecollet.com/enterprise/remi-release-6.rpm
+    - name: install man
+      yum: name=man state=latest
+    - name: install apache
+      yum: name=httpd state=latest
+    - name: start apache and enabled
+      service: name=httpd state=started enabled=yes
+    - name: change owner
+      file: dest=/var/www/html owner=vagrant recurse=yes
+    - name: copy httpd.conf
+      copy: src=httpd.conf.custom dest=/etc/httpd/conf/httpd.conf backup=yes
+      notify:
+        - restart apache
+    - name: install gd-last
+      yum: name=gd-last enablerepo=remi state=latest
+
+    - name: install libevent2
+      yum: name=libevent2 state=latest
+    - name: install php-common
+      yum: name=http://rpms.southbridge.ru/rhel6/php-5.2/x86_64/php-common-5.2.17-24.el6.x86_64.rpm state=present
+    - name: install php-cli
+      yum: name=http://rpms.southbridge.ru/rhel6/php-5.2/x86_64/php-cli-5.2.17-24.el6.x86_64.rpm state=present
+    - name: install php
+      yum: name=http://rpms.southbridge.ru/rhel6/php-5.2/x86_64/php-5.2.17-24.el6.x86_64.rpm state=present
+    - name: install autoconf
+      yum: name=autoconf state=latest
+    - name: install automake
+      yum: name=automake state=latest
+    - name: install php-devel
+      yum: name=http://rpms.southbridge.ru/rhel6/php-5.2/x86_64/php-devel-5.2.17-24.el6.x86_64.rpm state=present
+    - name: install t1lib
+      yum: name=http://rpmfind.net/linux/centos/6.9/os/x86_64/Packages/t1lib-5.1.2-6.el6_2.1.x86_64.rpm state=present
+    - name: install php-gd
+      yum: name=http://rpms.southbridge.ru/rhel6/php-5.2/x86_64/php-gd-5.2.17-24.el6.x86_64.rpm state=present
+    - name: install php-mbstring
+      yum: name=http://rpms.southbridge.ru/rhel6/php-5.2/x86_64/php-mbstring-5.2.17-24.el6.x86_64.rpm state=present
+    - name: install php-pdo
+      yum: name=http://rpms.southbridge.ru/rhel6/php-5.2/x86_64/php-pdo-5.2.17-24.el6.x86_64.rpm state=present
+      notify:
+        - restart apache
+
+    - name: Install PEAR
+      yum: name=php-pear state=latest
+    - name: Install Xdebug 2.2.7
+      command: sudo pecl install xdebug-2.2.7
+    - name: copy xdebug.ini
+      copy: src=xdebug.ini dest=/etc/php.d/xdebug.ini backup=yes
+
+    - name: copy php.ini.custom
+      copy: src=php.ini.custom dest=/etc/php.ini backup=yes
+      notify:
+        - restart apache
+
+    - name: copy phpinfo
+      copy: src=phpinfo.php dest=/var/www/html/phpinfo.php backup=yes
+
+    - name: install mysql
+      yum: name={{item}} state=present
+      with_items:
+        - mysql
+        - mysql-devel
+        - mysql-server
+        - mysql-utilities
+    - name: install mysqlclient
+      yum: name=http://www6.atomicorp.com/channels/atomic/centos/6/x86_64/RPMS/mysqlclient18-5.5.17-4.el6.art.x86_64.rpm state=present
+      # command: sudo yum install -y http://www6.atomicorp.com/channels/atomic/centos/6/x86_64/RPMS/mysqlclient18-5.5.17-4.el6.art.x86_64.rpm
+    - name: install php-mysql
+      yum: name=http://rpms.southbridge.ru/rhel6/php-5.2/x86_64/php-mysql-5.2.17-24.el6.x86_64.rpm state=present
+    - name: install mysql repository
+      command: rpm -Uvh --force http://dev.mysql.com/get/mysql-community-release-el6-5.noarch.rpm
+    - name: copy my.cnf.custom
+      copy: src=my.cnf.custom dest=/etc/my.cnf backup=yes
+    - name: start mysql and enabled
+      service: name=mysqld state=started enabled=yes
+
+    - name: install ruby dependencies
+      yum: name={{item}} enablerepo=remi,epel state=present
+      with_items:
+        - gcc
+        - openssl
+        - openssl-devel
+        - rpm-build
+        - gcc-c++
+        - bzip2
+        - bzip2-devel
+        - libtool
+        - zlib
+        - zlib-devel
+        - httpd-devel
+        - openssl-devel
+        - curl-devel
+        - ncurses-devel
+        - gdbm-devel
+        - readline
+        - readline-devel
+        - sqlite
+        - sqlite-devel
+        - libyaml-devel
+        - libffi-devel
+        - bison
+
+    - name: check rbenv installed
+      command: test -x /home/vagrant/.rbenv
+      register: rbenv_present
+      become: no
+      failed_when: rbenv_present.rc not in [0, 1]
+    - name: git clone rbenv
+      git: repo=https://github.com/sstephenson/rbenv.git dest=/home/vagrant/.rbenv
+      when: rbenv_present.rc == 1
+      become: no
+    - name: update bash_profile
+      copy: src=bash_profile.custom dest=/home/vagrant/.bash_profile backup=yes
+      become: no
+
+    - name: check ruby-build installed
+      command: test -x /home/vagrant/.rbenv/plugins/ruby-build
+      register: rbuild_present
+      become: no
+      failed_when: rbuild_present.rc not in [0, 1]
+    - name: git clone ruby-build
+      git: repo=https://github.com/sstephenson/ruby-build.git dest=/home/vagrant/.rbenv/plugins/ruby-build
+      when: rbuild_present.rc == 1
+      become: no
+
+    - name: update rbenv
+      command: git pull --rebase chdir=/home/vagrant/.rbenv
+      become: no
+    - name: update ruby-build
+      command: git pull --rebase chdir=/home/vagrant/.rbenv/plugins/ruby-build
+      become: no
+
+    - name: check ruby installed
+      shell: /bin/bash -lc "rbenv versions | grep {{ruby_version}}"
+      register: ruby_installed
+      become: no
+      failed_when: ruby_installed.rc not in [0, 1]
+    - name: install ruby
+      shell: /bin/bash -lc "rbenv install {{ruby_version}} && rbenv rehash && rbenv global {{ruby_version}}"
+      when: ruby_installed.rc == 1
+      become: no
+
+    - name: check pyenv installed
+      command: test -x /home/vagrant/.pyenv
+      register: pyenv_present
+      become: no
+      failed_when: pyenv_present.rc not in [0, 1]
+    - name: git clone pyenv
+      git: repo=https://github.com/yyuu/pyenv.git dest=/home/vagrant/.pyenv
+      when: pyenv_present.rc == 1
+      become: no
+
+    - name: check pyvirtual installed
+      command: test -x /home/vagrant/.pyenv/plugins/pyenv-virtualenv
+      register: pyvirtual_present
+      become: no
+      failed_when: pyvirtual_present.rc not in [0, 1]
+    - name: git clone pyenv-virtual
+      git: repo=https://github.com/yyuu/pyenv-virtualenv.git dest=/home/vagrant/.pyenv/plugins/pyenv-virtualenv
+      when: pyvirtual_present.rc == 1
+      become: no
+
+    - name: update pyenv
+      command: git pull --rebase chdir=/home/vagrant/.pyenv
+      become: no
+    - name: update pyenv-virtualenv
+      command: git pull --rebase chdir=/home/vagrant/.pyenv/plugins/pyenv-virtualenv
+      become: no
+
+    - name: check python installed
+      shell: /bin/bash -lc "pyenv versions | grep {{python_version}}"
+      register: python_installed
+      become: no
+      failed_when: python_installed.rc not in [0, 1]
+    - name: install python
+      shell: /bin/bash -lc "pyenv install {{python_version}} && pyenv rehash && pyenv global {{python_version}}"
+      when: python_installed.rc == 1
+      become: no
+
+    - name: check node js installed
+      shell: /bin/bash -lc "node -v"
+      register: node_installed
+      become: no
+      failed_when: node_installed.rc not in [0, 1, 127]
+    - name: install node script
+      shell: /bin/bash -lc "curl -sL https://rpm.nodesource.com/setup | bash -"
+      when: node_installed.rc == 127
+    - name: install nodejs
+      yum: name=nodejs state=latest
+      when: node_installed.rc == 127
+    - name: install npm
+      yum: name=npm state=latest
+      when: node_installed.rc == 127
+
+    - name: install vim
+      yum: name=vim state=latest
+
+    - name: chown
+      command: sudo chown -R apache:vagrant /var/www/html
+    - name: chown
+      command: sudo chmod -R 775 /var/www/html
+
+  handlers:
+    - name: restart apache
+      service: name=httpd state=restarted
